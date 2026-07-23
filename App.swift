@@ -42,7 +42,7 @@ private struct FileStamp: Equatable {
     let size: UInt64
 }
 
-final class ReaderWindowController: NSWindowController, WKNavigationDelegate, NSTableViewDataSource, NSTableViewDelegate {
+final class ReaderWindowController: NSWindowController, WKNavigationDelegate, NSTableViewDataSource, NSTableViewDelegate, NSMenuItemValidation {
     private let webView: ReaderWebView
     private let titleLabel = NSTextField(labelWithString: "hope的html阅读器")
     private let backButton = NSButton()
@@ -272,6 +272,38 @@ final class ReaderWindowController: NSWindowController, WKNavigationDelegate, NS
         webView.reload()
     }
 
+    @objc func setAsDefaultHTMLReader() {
+        NSWorkspace.shared.setDefaultApplication(
+            at: Bundle.main.bundleURL,
+            toOpen: .html
+        ) { error in
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                if let error {
+                    alert.messageText = "无法设为默认阅读器"
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                } else {
+                    alert.messageText = "已设为默认 HTML 阅读器"
+                    alert.informativeText = "以后在访达中双击 .html 或 .htm 文件，将使用 hope的html阅读器 打开。网页链接和其他文件的默认应用不会改变。"
+                    alert.alertStyle = .informational
+                }
+                alert.runModal()
+            }
+        }
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(setAsDefaultHTMLReader) else { return true }
+        let isDefault = NSWorkspace.shared
+            .urlForApplication(toOpen: .html)
+            .flatMap(Bundle.init(url:))?
+            .bundleIdentifier == Bundle.main.bundleIdentifier
+        menuItem.title = isDefault ? "已是默认 HTML 阅读器" : "设为默认 HTML 阅读器"
+        menuItem.state = isDefault ? .on : .off
+        return !isDefault
+    }
+
     @objc func toggleSidebar() {
         guard let splitView, !splitView.subviews.isEmpty else { return }
         let sidebar = splitView.subviews[0]
@@ -434,6 +466,13 @@ private func makeMainMenu() -> NSMenu {
     main.addItem(appItem)
     let appMenu = NSMenu()
     appItem.submenu = appMenu
+    let defaultItem = appMenu.addItem(
+        withTitle: "设为默认 HTML 阅读器",
+        action: #selector(ReaderWindowController.setAsDefaultHTMLReader),
+        keyEquivalent: ""
+    )
+    defaultItem.target = nil
+    appMenu.addItem(.separator())
     appMenu.addItem(withTitle: "退出hope的html阅读器", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
     let fileItem = NSMenuItem()

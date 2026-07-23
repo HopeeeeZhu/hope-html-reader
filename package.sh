@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=${0:A:h}
 APP_PATH="$SCRIPT_DIR/build/hope的html阅读器.app"
-DMG_PATH="$SCRIPT_DIR/dist/hope-html-reader-1.1-macos.dmg"
+DMG_PATH="$SCRIPT_DIR/dist/hope-html-reader-1.2-macos.dmg"
 STAGING_DIR=$(mktemp -d "${TMPDIR:-/tmp}/hope-html-reader-dmg.XXXXXX")
 trap 'rm -rf "$STAGING_DIR"' EXIT
 
