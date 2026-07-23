@@ -19,12 +19,11 @@ Drop in one HTML file and browse the entire folder like a document library; the 
 - Renders the original HTML without rewriting or cropping the page.
 - Refreshes about half a second after the file is saved.
 - Resizable and collapsible sidebar.
-- Can make itself the default app for local HTML files without changing link or other file handlers.
 - Supports Intel and Apple Silicon Macs running macOS 13 or later.
 
 ## Install
 
-Download `hope-html-reader-1.2-macos.dmg` from [GitHub Releases](https://github.com/HopeeeeZhu/hope-html-reader/releases), open it, and drag Hope HTML Reader into Applications.
+Download `hope-html-reader-1.1-macos.dmg` from [GitHub Releases](https://github.com/HopeeeeZhu/hope-html-reader/releases), open it, and drag Hope HTML Reader into Applications.
 
 The current build is locally signed but not Apple-notarized. If macOS blocks the first launch, right-click the app in Finder and choose **Open**.
 
@@ -33,8 +32,6 @@ The current build is locally signed but not Apple-notarized. If macOS blocks the
 - Drag an `.html` or `.htm` file into the window.
 - Use the folder button to choose a file.
 - In Finder, right-click an HTML file and choose **Open With → Hope HTML Reader**.
-
-To make it the default, choose **Set as Default HTML Reader** from the application menu. This only changes the handler for local `.html` and `.htm` files; web links and all other file types are left unchanged.
 
 CSS, JavaScript, images, and other files in the same folder load normally.
 
