@@ -309,6 +309,14 @@ final class ReaderWindowController: NSWindowController, WKNavigationDelegate, NS
         }
     }
 
+    @objc func enableCodexHTMLDefault() {
+        (NSApp.delegate as? AppDelegate)?.enableCodexHTMLDefault()
+    }
+
+    @objc func disableCodexHTMLDefault() {
+        (NSApp.delegate as? AppDelegate)?.disableCodexHTMLDefault()
+    }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard menuItem.action == #selector(setFolderHTMLFilesAsDefault) else { return true }
         return currentFileURL != nil && !htmlFiles.isEmpty
@@ -446,27 +454,185 @@ final class ReaderWindowController: NSWindowController, WKNavigationDelegate, NS
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var reader: ReaderWindowController?
+    private var receivedURLAtLaunch = false
+    private let previousHTTPBrowserKey = "PreviousHTTPBrowserPath"
+    private let previousHTTPSBrowserKey = "PreviousHTTPSBrowserPath"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if reader == nil {
-            reader = ReaderWindowController()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, !self.receivedURLAtLaunch else { return }
+            self.showReader()
         }
-        reader?.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        if reader == nil {
-            reader = ReaderWindowController()
+        receivedURLAtLaunch = true
+        let webURLs = urls.filter { ["http", "https"].contains($0.scheme?.lowercased() ?? "") }
+        if !webURLs.isEmpty {
+            forwardToPreviousBrowser(webURLs)
         }
-        if let url = urls.first {
-            reader?.open(url)
+        if let fileURL = urls.first(where: { $0.isFileURL }) {
+            showReader(fileURL)
+        }
+    }
+
+    @objc func enableCodexHTMLDefault() {
+        let workspace = NSWorkspace.shared
+        let appURL = Bundle.main.bundleURL.standardizedFileURL
+        let defaults = UserDefaults.standard
+
+        if let currentHTTP = workspace.urlForApplication(toOpen: URL(string: "http://example.com")!),
+           currentHTTP.standardizedFileURL != appURL {
+            defaults.set(currentHTTP.path, forKey: previousHTTPBrowserKey)
+        }
+        if let currentHTTPS = workspace.urlForApplication(toOpen: URL(string: "https://example.com")!),
+           currentHTTPS.standardizedFileURL != appURL {
+            defaults.set(currentHTTPS.path, forKey: previousHTTPSBrowserKey)
+        }
+
+        let handlers = [("http", appURL), ("https", appURL)]
+        if webHandlersMatch(handlers) {
+            showCodexHTMLDefaultEnabled()
+            return
+        }
+
+        setWebHandlers(to: appURL) { [weak self] errors in
+            guard let self else { return }
+            let alert = NSAlert()
+            if self.webHandlersMatch(handlers) {
+                self.showCodexHTMLDefaultEnabled()
+            } else {
+                alert.messageText = "设置未完成"
+                alert.informativeText = errors.map(\.localizedDescription).joined(separator: "\n")
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
+        }
+    }
+
+    @objc func disableCodexHTMLDefault() {
+        let defaults = UserDefaults.standard
+        guard
+            let httpPath = defaults.string(forKey: previousHTTPBrowserKey),
+            let httpsPath = defaults.string(forKey: previousHTTPSBrowserKey)
+        else {
+            showBrowserSettingError("没有找到之前使用的浏览器记录。")
+            return
+        }
+
+        let handlers = [
+            ("http", URL(fileURLWithPath: httpPath)),
+            ("https", URL(fileURLWithPath: httpsPath))
+        ]
+        setWebHandlers(handlers) { [weak self] errors in
+            guard let self else { return }
+            let alert = NSAlert()
+            if self.webHandlersMatch(handlers) {
+                alert.messageText = "已恢复原来的浏览器"
+                alert.informativeText = "Codex 将恢复使用原来的浏览器打开 HTML。"
+                alert.alertStyle = .informational
+            } else {
+                alert.messageText = "恢复未完成"
+                alert.informativeText = errors.map(\.localizedDescription).joined(separator: "\n")
+                alert.alertStyle = .warning
+            }
+            alert.runModal()
         }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
+
+    private func showReader(_ fileURL: URL? = nil) {
+        if reader == nil {
+            reader = ReaderWindowController()
+        }
+        if let fileURL {
+            reader?.open(fileURL)
+        } else {
+            reader?.showWindow(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    private func forwardToPreviousBrowser(_ urls: [URL]) {
+        let defaults = UserDefaults.standard
+        let key = urls.first?.scheme?.lowercased() == "http" ? previousHTTPBrowserKey : previousHTTPSBrowserKey
+        let storedPath = defaults.string(forKey: key)
+        let candidates = [
+            storedPath,
+            "/Applications/Google Chrome.app",
+            "/System/Applications/Safari.app",
+            "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"
+        ].compactMap { $0 }
+        guard let browserPath = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            showBrowserSettingError("找不到可用于打开网页链接的浏览器。")
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open(
+            urls,
+            withApplicationAt: URL(fileURLWithPath: browserPath),
+            configuration: configuration
+        ) { [weak self] _, error in
+            if let error {
+                self?.showBrowserSettingError(error.localizedDescription)
+            } else if self?.reader == nil {
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
+    private func setWebHandlers(to appURL: URL, completion: @escaping ([Error]) -> Void) {
+        setWebHandlers([("http", appURL), ("https", appURL)], completion: completion)
+    }
+
+    private func setWebHandlers(_ handlers: [(String, URL)], completion: @escaping ([Error]) -> Void) {
+        guard let (scheme, appURL) = handlers.first else {
+            completion([])
+            return
+        }
+        NSWorkspace.shared.setDefaultApplication(at: appURL, toOpenURLsWithScheme: scheme) { [weak self] error in
+            DispatchQueue.main.async {
+                let remainingHandlers = Array(handlers.dropFirst())
+                self?.setWebHandlers(remainingHandlers) { remainingErrors in
+                    completion((error.map { [$0] } ?? []) + remainingErrors)
+                }
+            }
+        }
+    }
+
+    private func webHandlersMatch(_ handlers: [(String, URL)]) -> Bool {
+        handlers.allSatisfy { scheme, appURL in
+            guard
+                let testURL = URL(string: "\(scheme)://example.com"),
+                let currentAppURL = NSWorkspace.shared.urlForApplication(toOpen: testURL)
+            else {
+                return false
+            }
+            return currentAppURL.standardizedFileURL == appURL.standardizedFileURL
+        }
+    }
+
+    private func showCodexHTMLDefaultEnabled() {
+        let alert = NSAlert()
+        alert.messageText = "Codex HTML 默认打开已启用"
+        alert.informativeText = "重新启动 Codex 后，HTML 的“打开文件”会默认进入 hope的html阅读器。普通网页链接仍会转交给原来的浏览器。"
+        alert.alertStyle = .informational
+        alert.runModal()
+    }
+
+    private func showBrowserSettingError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "无法调整 Codex HTML 默认打开方式"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.runModal()
+    }
+
 }
 
 private func makeMainMenu() -> NSMenu {
@@ -491,6 +657,18 @@ private func makeMainMenu() -> NSMenu {
         keyEquivalent: ""
     )
     defaultItem.target = nil
+    let codexDefaultItem = fileMenu.addItem(
+        withTitle: "让 Codex 默认用本应用打开 HTML",
+        action: #selector(ReaderWindowController.enableCodexHTMLDefault),
+        keyEquivalent: ""
+    )
+    codexDefaultItem.target = nil
+    let restoreBrowserItem = fileMenu.addItem(
+        withTitle: "关闭 Codex HTML 默认打开能力",
+        action: #selector(ReaderWindowController.disableCodexHTMLDefault),
+        keyEquivalent: ""
+    )
+    restoreBrowserItem.target = nil
     fileMenu.addItem(.separator())
     fileMenu.addItem(withTitle: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
 

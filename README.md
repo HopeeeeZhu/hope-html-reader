@@ -20,11 +20,12 @@
 - HTML 保存后约半秒自动刷新；
 - 侧边栏可调整宽度，也可以一键收起；
 - 可将当前文件夹中的 HTML 分别设为由本应用默认打开；
+- 可让 Codex 中的 HTML 链接默认进入本应用，同时把普通网页链接转交给原来的浏览器；
 - 支持 Intel 与 Apple 芯片，最低 macOS 13。
 
 ## 安装
 
-从 GitHub Releases 下载 `hope-html-reader-1.2-macos.dmg`，打开后将“hope的html阅读器”拖到“Applications”。
+从 GitHub Releases 下载 `hope-html-reader-1.3-macos.dmg`，打开后将“hope的html阅读器”拖到“Applications”。
 
 当前版本采用本地签名，未经过 Apple 公证。首次打开如被系统拦截，请在访达中右键应用并选择“打开”。
 
@@ -34,7 +35,9 @@
 - 点击文件夹按钮选择文件；
 - 在访达中右键 HTML 文件，选择“打开方式 → hope的html阅读器”。
 
-如需让 Codex 或访达中的“Default app”直接使用本应用，请先打开该文件夹中的任意 HTML，再从“文件”菜单选择“将当前文件夹 HTML 设为默认打开方式”。该操作只影响当前文件夹中现有的 `.html` 和 `.htm` 文件，不改变网页链接及其他文件的默认应用。
+如需让访达中的“默认 App”直接使用本应用，请先打开该文件夹中的任意 HTML，再从“文件”菜单选择“将当前文件夹 HTML 设为默认打开方式”。该操作只影响当前文件夹中现有的 `.html` 和 `.htm` 文件。
+
+Codex 会把 HTML 强制按浏览器处理，不读取访达的文件默认 App。若要让 Codex 默认进入本应用，请选择“文件 → 让 Codex 默认用本应用打开 HTML”，然后重新启动 Codex。启用后，普通 `http/https` 网页链接仍会转交给启用前的浏览器；需要撤销时选择“关闭 Codex HTML 默认打开能力”。
 
 同目录下的 CSS、JavaScript、图片等资源会随页面正常载入。
 
