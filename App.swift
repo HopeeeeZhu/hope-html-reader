@@ -42,7 +42,7 @@ private struct FileStamp: Equatable {
     let size: UInt64
 }
 
-final class ReaderWindowController: NSWindowController, WKNavigationDelegate, NSTableViewDataSource, NSTableViewDelegate {
+final class ReaderWindowController: NSWindowController, WKNavigationDelegate, NSTableViewDataSource, NSTableViewDelegate, NSMenuItemValidation {
     private let webView: ReaderWebView
     private let titleLabel = NSTextField(labelWithString: "hope的html阅读器")
     private let backButton = NSButton()
@@ -272,6 +272,48 @@ final class ReaderWindowController: NSWindowController, WKNavigationDelegate, NS
         webView.reload()
     }
 
+    @objc func setFolderHTMLFilesAsDefault() {
+        let files = htmlFiles
+        guard !files.isEmpty else { return }
+
+        var remaining = files.count
+        var succeeded = 0
+        var firstError: Error?
+        for file in files {
+            NSWorkspace.shared.setDefaultApplication(
+                at: Bundle.main.bundleURL,
+                toOpenFileAt: file
+            ) { error in
+                DispatchQueue.main.async {
+                    if let error {
+                        firstError = firstError ?? error
+                    } else {
+                        succeeded += 1
+                    }
+                    remaining -= 1
+                    guard remaining == 0 else { return }
+
+                    let alert = NSAlert()
+                    if succeeded == files.count {
+                        alert.messageText = "已设置 \(succeeded) 个 HTML 文件"
+                        alert.informativeText = "在 Codex、访达等位置选择“Default app”时，这些文件将使用 hope的html阅读器 打开。网页链接和其他文件不会改变。"
+                        alert.alertStyle = .informational
+                    } else {
+                        alert.messageText = "部分文件设置失败"
+                        alert.informativeText = "已设置 \(succeeded) 个，失败 \(files.count - succeeded) 个。\n\(firstError?.localizedDescription ?? "")"
+                        alert.alertStyle = .warning
+                    }
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(setFolderHTMLFilesAsDefault) else { return true }
+        return currentFileURL != nil && !htmlFiles.isEmpty
+    }
+
     @objc func toggleSidebar() {
         guard let splitView, !splitView.subviews.isEmpty else { return }
         let sidebar = splitView.subviews[0]
@@ -442,6 +484,13 @@ private func makeMainMenu() -> NSMenu {
     fileItem.submenu = fileMenu
     let openItem = fileMenu.addItem(withTitle: "打开…", action: #selector(ReaderWindowController.chooseFile), keyEquivalent: "o")
     openItem.target = nil
+    fileMenu.addItem(.separator())
+    let defaultItem = fileMenu.addItem(
+        withTitle: "将当前文件夹 HTML 设为默认打开方式",
+        action: #selector(ReaderWindowController.setFolderHTMLFilesAsDefault),
+        keyEquivalent: ""
+    )
+    defaultItem.target = nil
     fileMenu.addItem(.separator())
     fileMenu.addItem(withTitle: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
 
